@@ -1,0 +1,13 @@
+# Maybe you need install setup tools.
+$ sudo apt install python3-setuptools
+
+# Need have README.txt and setup.py into the folder.
+
+# Run the code that call setup tools.
+$ python3 setup.py sdist
+
+# Maybe you need install pip (Package Installer for Python)
+$ sudo apt install python-pip
+
+# Install the module.
+$ python3 -m pip install anotation-1.1.tar.gz
