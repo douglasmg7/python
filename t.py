@@ -1,5 +1,8 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
-import anotation 
+import os 
 
-anotation.print_some_thing('ertyerty')
+print(__file__)
+print(os.path.dirname(__file__))
+print(os.path.abspath(os.path.dirname(__file__)))
+print(os.path.abspath(__file__))

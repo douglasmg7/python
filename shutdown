@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# close process to avoid saved sessions, and shutdown the system,
+
+
+trap "just a moment" SIGTERM
+
+# list process
+for process in firefox chromium Telegram atom xfce4-terminal; do
+	# kill each process with the same name
+	pids=$(pgrep $process | sort)
+	set -- $pids
+	while [ $1 ]; do
+		echo "kill>${process}[${1}]"
+		kill -15 $1
+		sleep 1
+		pids=$(pgrep $process | sort)
+		set -- $pids
+	done
+done
+sleep 2
+# halt the system
+xfce4-session-logout --halt
