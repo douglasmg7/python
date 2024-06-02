@@ -5,5 +5,5 @@
 #  file_to_write.close()
 
 # Append to file.
-with open('a.txt', 'a') as file:
-    print('New line x', file=file)
+with open('write_file.txt', 'w') as file:
+    print('new file', file=file)
