@@ -1,0 +1,1 @@
+grep --line-number --exclude-dir={__pycache__,.venv,.git} --exclude={package-lock.json,\*.log} -r -e "$1"
