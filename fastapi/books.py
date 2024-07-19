@@ -57,6 +57,6 @@ async def update_book(update_book=Body()):
 @app.delete('/books/delete_book/{book_title}')
 async def update_book(book_title: str):
     for idx, book in enumerate(BOOKS):
-        if book.get('title').casefold() == update_book.get('title').casefold():
+        if book.get('title').casefold() == book_title.casefold():
             BOOKS.pop(idx)
             break
