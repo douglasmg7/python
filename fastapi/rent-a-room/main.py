@@ -1,4 +1,7 @@
+from os import name
+
 from fastapi import FastAPI, HTTPException, status
+from fastapi.staticfiles import StaticFiles
 
 apartment = {
     "id": 1,
@@ -29,18 +32,28 @@ app = FastAPI(
     contact={"name": "DMG", "email": "a@a.com"},
 )
 
+app.mount("/assets", StaticFiles(directory="assets"), name="assets")
+
 
 @app.get("/", status_code=status.HTTP_200_OK)
 def root():
     return {"message": "Welcome to Rent a Room"}
 
 
-@app.get("/rooms")
-def get_rooms():
-    return [apartment, house, studio]
+# http://localhost:8000/rooms?search=bedroom&max_price=200
+@app.get("/rooms", status_code=status.HTTP_200_OK)
+def get_rooms(search: str = "", max_price: int = 10_000):
+    collection = []
+    for room in [apartment, house, studio]:
+        if (
+            search.casefold() in room["name"].casefold()
+            and max_price >= room["price_per_night"]
+        ):
+            collection.append(room)
+    return collection
 
 
-@app.get("/rooms/{room_id}")
+@app.get("/rooms/{room_id}", status_code=status.HTTP_200_OK)
 def get_room(room_id: int):
     for room in [apartment, house, studio]:
         if room["id"] == room_id:
