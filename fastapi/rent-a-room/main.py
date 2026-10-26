@@ -1,6 +1,7 @@
 from os import name
+from typing import Annotated
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.staticfiles import StaticFiles
 
 apartment = {
@@ -41,16 +42,23 @@ def root():
 
 
 # http://localhost:8000/rooms?search=bedroom&max_price=200
+# max_price is a optional parameter.
 @app.get("/rooms", status_code=status.HTTP_200_OK)
-def get_rooms(search: str = "", max_price: int = 10_000):
-    collection = []
-    for room in [apartment, house, studio]:
-        if (
-            search.casefold() in room["name"].casefold()
-            and max_price >= room["price_per_night"]
-        ):
-            collection.append(room)
-    return collection
+def get_rooms(
+    max_price: int | None = None,
+    search: Annotated[str | None, Query(min_length=3, max_length=10)] = "",
+):
+    results = [apartment, house, studio]
+
+    if max_price:
+        results = [room for room in results if room["price_per_night"] <= max_price]
+
+    if search:
+        results = [
+            room for room in results if search.casefold() in room["name"].casefold()
+        ]
+
+    return results
 
 
 @app.get("/rooms/{room_id}", status_code=status.HTTP_200_OK)
