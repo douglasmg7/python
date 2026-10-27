@@ -3,6 +3,16 @@ from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.staticfiles import StaticFiles
+from pydantic import AfterValidator
+
+app = FastAPI(
+    title="Renta a Room API",
+    description="Book a stay in a house or room",
+    version="1.0.23",
+    contact={"name": "DMG", "email": "a@a.com"},
+)
+
+app.mount("/assets", StaticFiles(directory="assets"), name="assets")
 
 apartment = {
     "id": 1,
@@ -26,14 +36,27 @@ studio = {
     "bathrooms": 1,
 }
 
-app = FastAPI(
-    title="Renta a Room API",
-    description="Book a stay in a house or room",
-    version="1.0.23",
-    contact={"name": "DMG", "email": "a@a.com"},
+search_query_validation = Query(
+    min_length=3,
+    max_length=10,
+    title="Search term",
+    description="Provide a keyword to look for within the room's title",
 )
 
-app.mount("/assets", StaticFiles(directory="assets"), name="assets")
+
+def fail_if_funny(search: str):
+    if "lol" in search:
+        raise ValueError("No funny business allowed")
+    return search
+
+
+search_humor_ban_validation = AfterValidator(fail_if_funny)
+
+SearchQuery = Annotated[
+    str | None,
+    search_query_validation,
+    search_humor_ban_validation,
+]
 
 
 @app.get("/", status_code=status.HTTP_200_OK)
@@ -45,10 +68,28 @@ def root():
 # max_price is a optional parameter.
 @app.get("/rooms", status_code=status.HTTP_200_OK)
 def get_rooms(
-    max_price: int | None = None,
-    search: Annotated[str | None, Query(min_length=3, max_length=10)] = "",
+    max_price: Annotated[int | None, Query(ge=10, le=1_000)] = None,
+    search: SearchQuery = None,
 ):
     results = [apartment, house, studio]
+
+    if max_price:
+        results = [room for room in results if room["price_per_night"] <= max_price]
+
+    if search:
+        results = [
+            room for room in results if search.casefold() in room["name"].casefold()
+        ]
+
+    return results
+
+
+@app.get("/rooms/mansions", status_code=status.HTTP_200_OK)
+def get_mansions(
+    max_price: Annotated[int | None, Query(ge=10, le=1_000)] = None,
+    search: SearchQuery = None,
+):
+    results = [house]
 
     if max_price:
         results = [room for room in results if room["price_per_night"] <= max_price]
