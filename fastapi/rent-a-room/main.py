@@ -1,15 +1,31 @@
 from os import name
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import FastAPI, HTTPException, Query, status
+from fastapi import Cookie, FastAPI, Header, HTTPException, Query, Response, status
 from fastapi.staticfiles import StaticFiles
-from pydantic import AfterValidator
+
+# from pydantic import AfterValidator
+from pydantic import (
+    BaseModel,
+    Field,
+    NonNegativeFloat,
+    StringConstraints,
+    field_validator,
+)
+
+openapi_tags = [
+    {
+        "name": "rooms",
+        "description": "Operation with **rooms** (a 4-wall _space_ that can be slept in)",
+    }
+]
 
 app = FastAPI(
     title="Renta a Room API",
     description="Book a stay in a house or room",
     version="1.0.23",
     contact={"name": "DMG", "email": "a@a.com"},
+    openapi_tags=openapi_tags,
 )
 
 app.mount("/assets", StaticFiles(directory="assets"), name="assets")
@@ -36,75 +52,102 @@ studio = {
     "bathrooms": 1,
 }
 
-search_query_validation = Query(
-    min_length=3,
-    max_length=10,
-    title="Search term",
-    description="Provide a keyword to look for within the room's title",
-)
+
+class AppCookies(BaseModel):
+    theme: Literal["dark", "light"] = "dark"
+    language: Literal["en", "es"] = "en"
 
 
-def fail_if_funny(search: str):
-    if "lol" in search:
-        raise ValueError("No funny business allowed")
-    return search
+class AppHeader(BaseModel):
+    user_agent: str | None = None
 
 
-search_humor_ban_validation = AfterValidator(fail_if_funny)
+class RoomsQueryParams(BaseModel):
+    max_price: int | None = Field(
+        default=None, ge=10, le=10_000, examples=[100, 200, 10_000]
+    )
+    search: Annotated[str | None, StringConstraints(to_lower=True)] = Field(
+        default=None,
+        min_length=3,
+        max_length=10,
+        title="Search term",
+        description="Provide a keyword to look for within the room's title",
+        examples=["sunny", "bedroom", "house"],
+    )
 
-SearchQuery = Annotated[
-    str | None,
-    search_query_validation,
-    search_humor_ban_validation,
-]
+    @field_validator("search")
+    @classmethod
+    def fail_if_funny(cls, search: str) -> str:
+        if "lol" in search:
+            raise ValueError("No funny business allowed")
+        return search
 
 
 @app.get("/", status_code=status.HTTP_200_OK)
-def root():
-    return {"message": "Welcome to Rent a Room"}
+def root(
+    app_cookies: Annotated[AppCookies, Cookie()],
+    app_headers: Annotated[AppHeader, Header()],
+):
+    greetings = {"en": "Welcome", "es": "Bienvenido"}
+    greeting = greetings.get(app_cookies.language)
+
+    return {"message": greeting, "User-Agent": app_headers.user_agent}
 
 
 # http://localhost:8000/rooms?search=bedroom&max_price=200
-# max_price is a optional parameter.
-@app.get("/rooms", status_code=status.HTTP_200_OK)
-def get_rooms(
-    max_price: Annotated[int | None, Query(ge=10, le=1_000)] = None,
-    search: SearchQuery = None,
-):
+@app.get(
+    "/rooms",
+    status_code=status.HTTP_200_OK,
+    tags=["rooms"],
+    summary="List all available rooms",
+    description="Return all rooms. Supports filtering by price and search term.",
+    response_description="A list of rooms matching the filter criteria.",
+)
+def get_rooms(params: Annotated[RoomsQueryParams, Query()]):
     results = [apartment, house, studio]
 
-    if max_price:
-        results = [room for room in results if room["price_per_night"] <= max_price]
-
-    if search:
+    if params.max_price:
         results = [
-            room for room in results if search.casefold() in room["name"].casefold()
+            room for room in results if room["price_per_night"] <= params.max_price
         ]
+
+    if params.search:
+        results = [room for room in results if params.search in room["name"].lower()]
 
     return results
 
 
-@app.get("/rooms/mansions", status_code=status.HTTP_200_OK)
-def get_mansions(
-    max_price: Annotated[int | None, Query(ge=10, le=1_000)] = None,
-    search: SearchQuery = None,
-):
+@app.get(
+    "/rooms/mansions",
+    status_code=status.HTTP_200_OK,
+    tags=["rooms", "mansions"],
+    deprecated=True,
+)
+def get_mansions(params: Annotated[RoomsQueryParams, Query()]):
     results = [house]
 
-    if max_price:
-        results = [room for room in results if room["price_per_night"] <= max_price]
-
-    if search:
+    if params.max_price:
         results = [
-            room for room in results if search.casefold() in room["name"].casefold()
+            room for room in results if room["price_per_night"] <= params.max_price
         ]
+
+    if params.search:
+        results = [room for room in results if params.search in room["name"].lower()]
 
     return results
 
 
-@app.get("/rooms/{room_id}", status_code=status.HTTP_200_OK)
+@app.get("/rooms/{room_id}", status_code=status.HTTP_200_OK, tags=["rooms"])
 def get_room(room_id: int):
     for room in [apartment, house, studio]:
         if room["id"] == room_id:
             return room
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
+
+
+@app.get("/preferences", status_code=status.HTTP_200_OK, tags=["preferences"])
+def set_preferences(response: Response):
+    app_cookies = AppCookies()
+    response.set_cookie(key="theme", value=app_cookies.theme)
+    response.set_cookie(key="language", value=app_cookies.language)
+    return {"message": "preferences updated"}
