@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from os import name
 from typing import Annotated, Literal
 
@@ -13,6 +14,8 @@ from pydantic import (
     field_validator,
 )
 
+from database import create_db_and_table
+
 openapi_tags = [
     {
         "name": "rooms",
@@ -20,7 +23,15 @@ openapi_tags = [
     }
 ]
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    create_db_and_table()
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="Renta a Room API",
     description="Book a stay in a house or room",
     version="1.0.23",
