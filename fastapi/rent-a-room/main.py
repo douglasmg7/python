@@ -2,7 +2,15 @@ from contextlib import asynccontextmanager
 from os import name
 from typing import Annotated, Literal
 
-from fastapi import Cookie, FastAPI, Header, HTTPException, Query, Response, status
+from fastapi import (
+    Cookie,
+    FastAPI,
+    Header,
+    HTTPException,
+    Query,
+    Response,
+    status,
+)
 from fastapi.staticfiles import StaticFiles
 
 # from pydantic import AfterValidator
@@ -13,8 +21,10 @@ from pydantic import (
     StringConstraints,
     field_validator,
 )
+from sqlmodel import select
 
-from database import create_db_and_table
+from database import SessionDep, create_db_and_table
+from models import Room
 
 openapi_tags = [
     {
@@ -40,28 +50,6 @@ app = FastAPI(
 )
 
 app.mount("/assets", StaticFiles(directory="assets"), name="assets")
-
-apartment = {
-    "id": 1,
-    "name": "Sunny 2-bedroom apartment",
-    "price_per_night": 200,
-    "bedrooms": 2,
-    "bathrooms": 1.5,
-}
-house = {
-    "id": 2,
-    "name": "Cozy 3-bedroom house",
-    "price_per_night": 350,
-    "bedrooms": 3,
-    "bathrooms": 2.5,
-}
-studio = {
-    "id": 3,
-    "name": "Modern studio near museum",
-    "price_per_night": 150,
-    "bedrooms": 1,
-    "bathrooms": 1,
-}
 
 
 class AppCookies(BaseModel):
@@ -98,11 +86,20 @@ class RoomsQueryParams(BaseModel):
 def root(
     app_cookies: Annotated[AppCookies, Cookie()],
     app_headers: Annotated[AppHeader, Header()],
+    session: SessionDep,
 ):
     greetings = {"en": "Welcome", "es": "Bienvenido"}
     greeting = greetings.get(app_cookies.language)
 
     return {"message": greeting, "User-Agent": app_headers.user_agent}
+
+
+@app.post("/rooms", status_code=status.HTTP_201_CREATED, tags=["rooms"])
+def create_room(session: SessionDep, room: Room) -> Room:
+    session.add(room)
+    session.commit()
+    session.refresh(room)
+    return room
 
 
 # http://localhost:8000/rooms?search=bedroom&max_price=200
@@ -114,16 +111,14 @@ def root(
     description="Return all rooms. Supports filtering by price and search term.",
     response_description="A list of rooms matching the filter criteria.",
 )
-def get_rooms(params: Annotated[RoomsQueryParams, Query()]):
-    results = [apartment, house, studio]
+def get_rooms(session: SessionDep, params: Annotated[RoomsQueryParams, Query()]):
+    results = session.exec(select(Room)).all()
 
     if params.max_price:
-        results = [
-            room for room in results if room["price_per_night"] <= params.max_price
-        ]
+        results = [room for room in results if room.price_per_night <= params.max_price]
 
     if params.search:
-        results = [room for room in results if params.search in room["name"].lower()]
+        results = [room for room in results if params.search in room.name.lower()]
 
     return results
 
