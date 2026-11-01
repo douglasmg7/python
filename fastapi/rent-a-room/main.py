@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from os import name
+from os import name, stat
 from typing import Annotated, Literal
 
 from fastapi import (
@@ -7,6 +7,7 @@ from fastapi import (
     FastAPI,
     Header,
     HTTPException,
+    Path,
     Query,
     Response,
     status,
@@ -21,7 +22,7 @@ from pydantic import (
     StringConstraints,
     field_validator,
 )
-from sqlmodel import select
+from sqlmodel import col, desc, func, select
 
 from database import SessionDep, create_db_and_table
 from models import Room
@@ -73,6 +74,8 @@ class RoomsQueryParams(BaseModel):
         description="Provide a keyword to look for within the room's title",
         examples=["sunny", "bedroom", "house"],
     )
+    limit: int = Field(default=10, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
 
     @field_validator("search")
     @classmethod
@@ -80,6 +83,9 @@ class RoomsQueryParams(BaseModel):
         if "lol" in search:
             raise ValueError("No funny business allowed")
         return search
+
+
+RoomId = Annotated[int, Path(ge=1, description="The id room to fetch")]
 
 
 @app.get("/", status_code=status.HTTP_200_OK)
@@ -112,43 +118,33 @@ def create_room(session: SessionDep, room: Room) -> Room:
     response_description="A list of rooms matching the filter criteria.",
 )
 def get_rooms(session: SessionDep, params: Annotated[RoomsQueryParams, Query()]):
-    results = session.exec(select(Room)).all()
+    statement = select(Room)
 
     if params.max_price:
-        results = [room for room in results if room.price_per_night <= params.max_price]
+        statement = statement.where(Room.price_per_night <= params.max_price)
 
     if params.search:
-        results = [room for room in results if params.search in room.name.lower()]
+        statement = statement.where(func.lower(Room.name).contains(params.search))
+        # statement = statement.where(col(Room.name).ilike(f"%{params.search}%"))
 
-    return results
+    statement = (
+        statement.order_by(col(Room.id)).offset(params.offset).limit(params.limit)
+    )
 
-
-@app.get(
-    "/rooms/mansions",
-    status_code=status.HTTP_200_OK,
-    tags=["rooms", "mansions"],
-    deprecated=True,
-)
-def get_mansions(params: Annotated[RoomsQueryParams, Query()]):
-    results = [house]
-
-    if params.max_price:
-        results = [
-            room for room in results if room["price_per_night"] <= params.max_price
-        ]
-
-    if params.search:
-        results = [room for room in results if params.search in room["name"].lower()]
-
-    return results
+    return session.exec(statement).all()
 
 
 @app.get("/rooms/{room_id}", status_code=status.HTTP_200_OK, tags=["rooms"])
-def get_room(room_id: int):
-    for room in [apartment, house, studio]:
-        if room["id"] == room_id:
-            return room
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
+def get_room(
+    session: SessionDep,
+    room_id: RoomId,
+) -> Room:
+    room = session.get(Room, room_id)
+    if not room:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Room not found"
+        )
+    return room
 
 
 @app.get("/preferences", status_code=status.HTTP_200_OK, tags=["preferences"])
