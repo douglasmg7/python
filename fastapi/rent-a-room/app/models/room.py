@@ -1,4 +1,10 @@
-from sqlmodel import Field, SQLModel
+from typing import TYPE_CHECKING
+
+from sqlmodel import Field, Relationship, SQLModel
+from sqlmodel.main import relationship
+
+if TYPE_CHECKING:
+    from app.models.booking import Booking
 
 
 # Shared field for all representation of room.
@@ -19,6 +25,8 @@ class Room(RoomBase, table=True):
     __tablename__: str = "rooms"
 
     id: int | None = Field(default=None, primary_key=True)
+
+    bookings: list["Booking"] = Relationship(back_populates="room")
 
 
 class RoomUpdate(SQLModel):
