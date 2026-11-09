@@ -1,10 +1,11 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, StringConstraints, field_validator
 from sqlmodel import col, func, select
 
 from app.dependencies.database import SessionDep
+from app.dependencies.room import RoomDep, RoomId, get_room_or_404
 from app.models.room import Room, RoomBase, RoomPublic, RoomUpdate
 
 MAINTENANCE_MODE = False
@@ -34,21 +35,6 @@ class RoomsQueryParams(BaseModel):
         if "lol" in search:
             raise ValueError("No funny business allowed")
         return search
-
-
-RoomId = Annotated[int, Path(ge=1, description="The id room to fetch")]
-
-
-async def get_room_or_404(session: SessionDep, room_id: RoomId) -> Room:
-    room = await session.get(Room, room_id)
-    if not room:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Room not found"
-        )
-    return room
-
-
-RoomDep = Annotated[Room, Depends(get_room_or_404)]
 
 
 def check_maintenence_mode():
